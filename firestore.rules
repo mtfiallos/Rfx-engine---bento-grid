@@ -1,0 +1,90 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Global Safety Net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- PRIMITIVES ---
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { 
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == "admin";
+    }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
+    function incoming() { return request.resource.data; }
+    function existing() { return resource.data; }
+    function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
+
+    // --- ENTITY VALIDATION ---
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['email', 'displayName', 'role', 'createdAt', 'updatedAt']) &&
+        data.email is string && data.email.size() > 0 && data.email.size() <= 256 &&
+        data.displayName is string && data.displayName.size() > 0 && data.displayName.size() <= 128 &&
+        data.role is string && (data.role == 'responder' || data.role == 'manager' || data.role == 'admin') &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    function isValidRFxOpportunity(data) {
+      return data.keys().hasAll(['title', 'issuer', 'type', 'status', 'ownerId', 'createdAt', 'updatedAt']) &&
+        data.title is string && data.title.size() > 0 && data.title.size() <= 256 &&
+        data.issuer is string && data.issuer.size() > 0 && data.issuer.size() <= 256 &&
+        data.type is string && (data.type == 'rfp' || data.type == 'rfq' || data.type == 'rfi') &&
+        data.status is string && (data.status == 'triage' || data.status == 'drafting' || data.status == 'review' || data.status == 'submitted' || data.status == 'won' || data.status == 'lost' || data.status == 'no_bid') &&
+        data.ownerId is string && data.ownerId.size() > 0 && data.ownerId.size() <= 128 &&
+        data.createdAt is timestamp &&
+        data.updatedAt is timestamp;
+    }
+
+    // --- COLLECTIONS ---
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if isAdmin() || isSignedIn(); // Allow team members to see each other
+      
+      // Creating a user profile
+      allow create: if isValidId(userId) && 
+        isOwner(userId) && 
+        isValidUser(incoming()) && 
+        incoming().keys().size() <= 10 && 
+        incoming().createdAt == request.time && 
+        incoming().updatedAt == request.time &&
+        (incoming().role == 'responder' || incoming().role == 'manager'); 
+      
+      allow update: if isValidId(userId) && 
+        isOwner(userId) &&
+        isValidUser(incoming()) &&
+        incoming().updatedAt == request.time &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().role == existing().role; // cannot change own role
+    }
+
+    match /rfx_opportunities/{opportunityId} {
+      allow get: if isValidId(opportunityId) && isSignedIn();
+      allow list: if isSignedIn();
+
+      allow create: if isValidId(opportunityId) && 
+        isSignedIn() &&
+        incoming().ownerId == request.auth.uid &&
+        isValidRFxOpportunity(incoming()) &&
+        incoming().createdAt == request.time &&
+        incoming().updatedAt == request.time;
+
+      allow update: if isValidId(opportunityId) && 
+        isSignedIn() &&
+        isValidRFxOpportunity(incoming()) &&
+        (isAdmin() || existing().ownerId == request.auth.uid) && // Allow owner or admin to update
+        incoming().updatedAt == request.time &&
+        incoming().createdAt == existing().createdAt &&
+        incoming().ownerId == existing().ownerId &&
+        (
+          incoming().diff(existing()).affectedKeys().hasOnly(['title', 'issuer', 'description', 'dueDate', 'updatedAt']) ||
+          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+        );
+
+      allow delete: if isValidId(opportunityId) && isSignedIn() && (isAdmin() || existing().ownerId == request.auth.uid);
+    }
+  }
+}

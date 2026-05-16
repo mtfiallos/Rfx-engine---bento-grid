@@ -1,0 +1,6 @@
+{
+  "name": "RFx Engine",
+  "description": "An application to manage responses to procurement events like RFPs and RFQs, featuring response tracking, document management via Google Drive, and Firebase authentication.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

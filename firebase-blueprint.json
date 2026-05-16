@@ -1,0 +1,44 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile in the application",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["responder", "manager", "admin"] },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["email", "displayName", "role", "createdAt", "updatedAt"]
+    },
+    "RFxOpportunity": {
+      "title": "RFx Opportunity",
+      "description": "A received procurement event that the team is responding to",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "description": { "type": "string" },
+        "issuer": { "type": "string" },
+        "type": { "type": "string", "enum": ["rfp", "rfq", "rfi"] },
+        "status": { "type": "string", "enum": ["triage", "drafting", "review", "submitted", "won", "lost", "no_bid"] },
+        "ownerId": { "type": "string" },
+        "dueDate": { "type": "number" },
+        "createdAt": { "type": "number" },
+        "updatedAt": { "type": "number" }
+      },
+      "required": ["title", "issuer", "type", "status", "ownerId", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Store user profiles"
+    },
+    "/rfx_opportunities/{opportunityId}": {
+      "schema": { "$ref": "#/entities/RFxOpportunity" },
+      "description": "Store RFx opportunities and response tracking"
+    }
+  }
+}
